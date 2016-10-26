@@ -6,22 +6,18 @@ from .convolve_spec import convolve_spec
 from .noise_routines import Fstar, Fplan, FpFs, cplan, czodi, cezodi, cspeck, cdark, cread, ctherm, ccic, f_airy
 import pdb
 
-def count_rates(Ahr, lamhr, solhr,
-                alpha, Phi, Rp, Teff, Rs, r, d, Nez,
+def count_rates(Ahr, lamhr,
+                alpha, Phi, Rp, Teff, Rs, r, d, Nez, diam, Res, Tsys, IWA, OWA,
+                solhr='BBody',
                 mode   = "IFS",
                 filter_wheel = None,
-                lammin = 0.4,
-                lammax = 2.5,
-                Res    = 70.0,
-                diam   = 10.0,
-                Tput   = 0.05,
-                C      = 1e-10,
-                IWA    = 3.0,
-                OWA    = 20.0,
-                Tsys   = 150.0,
+                lammin = 0.2,
+                lammax = 3.5,
+                Tput   = 0.2, #ty had 0.05
+                C      = 1e-10, #contrast 1e-9 from ty
                 Tdet   = 50.0,
                 emis   = 0.9,
-                De     = 1e-4,
+                De     = 1e-4, #dark current (ty has 5e-4)
                 DNHpix = 3.0,
                 Re     = 0.1,
                 Dtmax  = 1.0,
@@ -30,7 +26,11 @@ def count_rates(Ahr, lamhr, solhr,
                 MzV    = 23.0,
                 MezV   = 22.0,
                 wantsnr=10.0, FIX_OWA = False, COMPUTE_LAM = False,
-                SILENT = False, NIR = True, THERMAL = False):
+                SILENT = False, NIR = True, THERMAL = True):
+    #note we get much better SNR than Ty got in his coronagraph paper's LUVIOR
+    #simulation because we assume better Tput (0.2 vs his 0.05) and lower dark current
+    #(1e-4 vs his 5e-4)
+    
     """
     Generate photon count rates for specified telescope and planet parameters
 
@@ -59,6 +59,7 @@ def count_rates(Ahr, lamhr, solhr,
     """
 
     # Configure for different telescope observing modes
+    print "configuring for different observing moves"
     if mode == 'Imaging':
         filters = filter_wheel
         IMAGE = True
@@ -81,6 +82,7 @@ def count_rates(Ahr, lamhr, solhr,
     fpa = f_airy(X)
 
     # Set wavelength grid
+    print "setting wavelength grid"
     if COMPUTE_LAM:
         lam  = lammin #in [um]
         Nlam = 1
@@ -107,6 +109,7 @@ def count_rates(Ahr, lamhr, solhr,
         return None
 
     # Set Quantum Efficiency
+    print "setting QE"
     q = np.zeros(Nlam)
     for j in range(Nlam):
         if (lam[j] <= 0.7):
@@ -120,6 +123,7 @@ def count_rates(Ahr, lamhr, solhr,
     Re = np.zeros(Nlam) + Re
 
     # Set Angular size of lenslet
+    print "setting size of lenslet"
     theta = lammin/1.e6/diam/2.*(180/np.pi*3600.) # assumes sampled at ~lambda/2D (arcsec)
     if NIR:
         theta = np.zeros(Nlam)
@@ -144,6 +148,7 @@ def count_rates(Ahr, lamhr, solhr,
             De[iNIR][iDe] = 1e-3
 
     # Set throughput
+    print "setting throughput"
     T    = Tput + np.zeros(Nlam)
     sep  = r/d*np.sin(alpha*np.pi/180.)*np.pi/180./3600. # separation in radians
     iIWA = ( sep < IWA*lam/diam/1.e6 )
@@ -165,24 +170,37 @@ def count_rates(Ahr, lamhr, solhr,
 
 
     # Degrade albedo and stellar spectrum
+    print "degrading spectrum"
+ #   if Rp == 10.97: 
+#        pdb.set_trace()
     if COMPUTE_LAM:
         A = degrade_spec(Ahr,lamhr,lam,dlam=dlam)
-        Fs = degrade_spec(solhr, lamhr, lam, dlam=dlam)
+        print "A"
+        if not isinstance(solhr, basestring):
+            print 'degrading stellar (non blackbody) stellar spectrum'
+            Fs = degrade_spec(solhr, lamhr, lam, dlam=dlam)
     elif IMAGE:
         # Convolve with filter response
         A = convolve_spec(Ahr, lamhr, filters)
-        Fs = convolve_spec(solhr, lamhr, filters)
+        print "B"
+        if not isinstance(solhr, basestring):
+            Fs = convolve_spec(solhr, lamhr, filters)
     else:
         A = Ahr
         Fs = solhr
+        print "C"
 
     # Compute fluxes
-    #Fs = Fstar(lam, Teff, Rs, r, AU=True) # stellar flux on planet
+    print "computing fluxes"
+    if isinstance(solhr, basestring):
+        print 'generating blackbody for star'
+        Fs = Fstar(lam, Teff, Rs, r, AU=True) # stellar flux on planet
     Fp = Fplan(A, Phi, Fs, Rp, d)         # planet flux at telescope
     Cratio = FpFs(A, Phi, Rp, r)
 
 
     ##### Compute count rates #####
+    print "computing count rates"
     cp     =  cplan(q, fpa, T, lam, dlam, Fp, diam)                            # planet count rate
     cz     =  czodi(q, X, T, lam, dlam, diam, MzV)                           # solar system zodi count rate
     cez    =  cezodi(q, X, T, lam, dlam, diam, r, \
@@ -216,6 +234,7 @@ def count_rates(Ahr, lamhr, solhr,
     '''
 
     # Exposure time to SNR
+    print "converting exposure time to SNR"
     DtSNR = np.zeros(Nlam)
     DtSNR[:] = 0.
     i = (cp > 0.)

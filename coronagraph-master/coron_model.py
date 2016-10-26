@@ -17,8 +17,8 @@ import yaml
 from bokeh.plotting import Figure
 from bokeh.models import ColumnDataSource, HBox, VBoxForm, HoverTool, Paragraph, Range1d 
 from bokeh.layouts import column, row, WidgetBox 
-from bokeh.models.widgets import Slider, Panel, Tabs, Div, TextInput, RadioButtonGroup
-from bokeh.io import hplot, vplot, curdoc
+from bokeh.models.widgets import Slider, Panel, Tabs, Div, TextInput, RadioButtonGroup, Select
+from bokeh.io import hplot, vplot, curdoc, output_file, show, vform
 from bokeh.models.callbacks import CustomJS
 from bokeh.embed import components, autoload_server 
 
@@ -29,7 +29,12 @@ import coronagraph as cg  # Import coronagraph model
 ################################
 
 # Integration time (hours)
-Dt = 20.0 # - SLIDER 
+Dt = 20.0 # - SLIDER
+
+# Telescopes params
+diam = 10. # mirror diameter - SLIDER
+Res = 70. # resolution - SLIDER
+Tsys = 150. # system temperature - SLIDER
 
 # Planet params
 alpha = 90.     # phase angle at quadrature
@@ -50,14 +55,23 @@ Nez  = 1.      # number of exo-zodis  - SLIDER
 ################################
 
 # Read-in spectrum file
-fn = 'planets/earth_quadrature_radiance_refl.dat'
-model = np.loadtxt(fn, skiprows=8)
-lamhr = model[:,0]
-radhr = model[:,1]
-solhr = model[:,2]
-
+whichplanet = 'Venus'
+if whichplanet == 'Earth':
+   fn = 'planets/earth_quadrature_radiance_refl.dat'
+   model = np.loadtxt(fn, skiprows=8)
+   lamhr = model[:,0]
+   radhr = model[:,1]
+   solhr = model[:,2]
 # Calculate hi-resolution reflectivity
-Ahr   = np.pi*(np.pi*radhr/solhr)
+   Ahr   = np.pi*(np.pi*radhr/solhr)
+
+if whichplanet == 'Venus':
+   fn = 'planets/Venus_geo_albedo.txt'
+   model = np.loadtxt(fn, skiprows=8)
+   lamhr = model[:,0]
+   Ahr = model[:,1]
+   solhr = model[:,2]
+
 
 ################################
 # RUN CORONAGRAPH MODEL
@@ -65,7 +79,7 @@ Ahr   = np.pi*(np.pi*radhr/solhr)
 
 # Run coronagraph with default LUVOIR telescope (aka no keyword arguments)
 lam, dlam, A, q, Cratio, cp, csp, cz, cez, cD, cR, cth, DtSNR = \
-    cg.count_rates(Ahr, lamhr, solhr, alpha, Phi, Rp, Teff, Rs, r, d, Nez)
+    cg.count_rates(Ahr, lamhr, solhr, alpha, Phi, Rp, Teff, Rs, r, d, Nez, diam, Res, Tsys)
 # Calculate background photon count rates
 cb = (cz + cez + csp + cD + cR + cth)
 # Convert hours to seconds
@@ -83,10 +97,11 @@ planet = ColumnDataSource(data=dict(lam=lam, cratio=Cratio*1e9, spec=spec*1e9, d
 # BOKEH PLOTTING
 ################################
 
+#fixed y axis is bad
 snr_plot = Figure(plot_height=400, plot_width=750, 
               tools="crosshair,pan,reset,resize,save,box_zoom,wheel_zoom",
-              x_range=[0.3, 2.7], y_range=[0, 1], toolbar_location='right')
-snr_plot.x_range = Range1d(0.3, 2.7, bounds=(0.3, 2.7)) 
+              x_range=[0.2, 3.5], y_range=[0, 1], toolbar_location='right')
+snr_plot.x_range = Range1d(0.2, 3.5, bounds=(0.2, 3.5)) 
 snr_plot.y_range = Range1d(0.0, 1.2, bounds=(0.3, 5.0)) 
 snr_plot.background_fill_color = "beige"
 snr_plot.background_fill_alpha = 0.5
@@ -134,11 +149,14 @@ def i_clicked_a_button(new):
 def update_data(attrname, old, new):
 
     print 'Updating model for exptime = ', exptime.value, ' for planet with R = ', radius.value, ' at distance ', distance.value, ' parsec '
-    print '                   exozodi = ', exozodi.value
+    print '                   exozodi = ', exozodi.value, 'diameter (m) = ', diameter.value, 'resolution = ', resolution.value
+    print '                   temperature (K) = ', temperature.value
     
     # Run coronagraph with default LUVOIR telescope (aka no keyword arguments)
     lam, dlam, A, q, Cratio, cp, csp, cz, cez, cD, cR, cth, DtSNR = \
-        cg.count_rates(Ahr, lamhr, solhr, alpha, Phi, radius.value, Teff, Rs, semimajor.value, distance.value, exozodi.value)
+        cg.count_rates(Ahr, lamhr, solhr, alpha, Phi, radius.value, Teff, Rs, semimajor.value, distance.value, exozodi.value, diameter.value, resolution.value, temperature.value)
+
+    print "Thermal counts is =", cth
     # Calculate background photon count rates
     cb = (cz + cez + csp + cD + cR + cth)
     # Convert hours to seconds
@@ -161,11 +179,11 @@ def update_data(attrname, old, new):
 
 source = ColumnDataSource(data=dict(value=[]))
 source.on_change('data', update_data)
-exptime  = Slider(title="Integration Time (hours)", value=20., start=10., end=100.0, step=1.0, callback_policy='mouseup')
+exptime  = Slider(title="Integration Time (hours)", value=20., start=1., end=100.0, step=1.0, callback_policy='mouseup')
 exptime.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
 """)
-distance = Slider(title="Distance (parsec)", value=10., start=2., end=50.0, step=1.0, callback_policy='mouseup') 
+distance = Slider(title="Distance (parsec)", value=10., start=1.28, end=50.0, step=0.2, callback_policy='mouseup') 
 distance.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
 """)
@@ -173,7 +191,7 @@ radius   = Slider(title="Planet Radius (R_Earth)", value=1.0, start=0.5, end=3.,
 radius.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
 """)
-semimajor= Slider(title="Semi-major axis of orbit (AU)", value=1.0, start=0.2, end=2., step=0.1, callback_policy='mouseup') 
+semimajor= Slider(title="Semi-major axis of orbit (AU)", value=1.0, start=0.1, end=20., step=0.1, callback_policy='mouseup') 
 semimajor.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
 """)
@@ -181,11 +199,27 @@ exozodi  = Slider(title="Number of Exozodi", value = 1.0, start=1.0, end=10., st
 exozodi.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
 """)
+diameter  = Slider(title="Mirror Diameter", value = 10.0, start=1.0, end=50., step=1., callback_policy='mouseup') 
+diameter.callback = CustomJS(args=dict(source=source), code="""
+    source.data = { value: [cb_obj.value] }
+""")
+resolution  = Slider(title="Telescope Resolution", value = 70.0, start=10.0, end=200., step=5., callback_policy='mouseup') 
+resolution.callback = CustomJS(args=dict(source=source), code="""
+    source.data = { value: [cb_obj.value] }
+""")
+temperature  = Slider(title="Telescope Temperature", value = 150.0, start=90.0, end=400., step=10., callback_policy='mouseup') 
+temperature.callback = CustomJS(args=dict(source=source), code="""
+    source.data = { value: [cb_obj.value] }
+""")
 
+#test
+menu = [("Item 1", "item_1"), ("Item 2", "item_2"), None, ("Item 3", "item_3")]
+dropdown = Dropdown(label="Dropdown button", button_type="warning", menu=menu)
 
+show(WidgetBox(dropdown))
+#end test
 
-
-oo = column(children=[exptime]) 
+oo = column(children=[exptime, diameter, resolution, temperature]) 
 pp = column(children=[distance, radius, semimajor, exozodi]) 
 qq = column(children=[instruction0, text_input, instruction1, format_button_group, instruction2, link_box]) 
 
@@ -223,5 +257,3 @@ curdoc().add_root(row(children=[inputs, snr_plot]))
 
 
 curdoc().add_root(source) 
-
-

@@ -8,6 +8,7 @@ Created on Mon Jul  6 11:00:41 2015
 import numpy as np
 import scipy as sp
 from scipy import interpolate
+import pdb
 
 def degrade_spec(specHR, lamHR, lamLR, dlam=[]):
     
@@ -54,14 +55,22 @@ def degrade_spec(specHR, lamHR, lamLR, dlam=[]):
         else:
             lamS = lamLO[i] - 0.5*dlamLO[i]
             lamL = lamLO[i] + 0.5*dlamLO[i]
-                
+
         # Elements of hi-res grid within the low-res element
         eps = 1e-10
         iss = (lamHI - lamS >= eps) & (lamHI - lamL <= eps)
+
         
         # If there aren't any high-res elements within low
         # res element, then error
         check1 = False if True in iss else True
+        
+          #  pdb.set_trace()
+        #print 'lamS=', lamS
+        #print 'lamL=', lamL
+        #print 'lamHI=', lamHI
+        #print 'check1=', check1
+        #print 'iss=', iss
         if check1:
             print("Error in DEGRADE_SPECTRUM: wavelength grids do not sync")
         
