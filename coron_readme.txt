@@ -1,21 +1,19 @@
-The LUVOIR coronagraph simulator tool is based off Tyler Robinson's coronagraph noise model (Robinson et al. 2016). The python version of this tool was produced by Jacob Lustig-Yaeger (available at https://github.com/jlustigy/coronagraph). The Bokeh rendering was produced by Jason Tumlinson and Giada Arney from the pyton version.
+The LUVOIR coronagraph simulator tool is based off Tyler Robinson's coronagraph noise model (Robinson et al. 2016). The python version of this tool was produced by Jacob Lustig-Yaeger (available at https://github.com/jlustigy/coronagraph). The Bokeh rendering was produced by Jason Tumlinson and Giada Arney from the python version.
 
 The coronagraph noise model used here assumes most of the same nominal parameters as those used in Robinson et al. (2016). The values of internal (i.e. non-slider) input parameters used here are:
 
-Throughput = 0.2 (Note Robinson et al. 2016 uses 0.05)
 Contrast ratio = 1e-10
 Detector temperature = 50 K
 Emissivity = 0.9
-Dark current = 1e-4 counts/s (Robinson et al. 2016 uses 5e-4)
 DNHpix = 3.0 (= number of horizontal/spatial pixels in dispersed spectrum)
-Read noise  = 0.1 counts per pixel
-Detector maximum exposure time = 1.0 hour 
 width of photometric aperture = 1.5 (times lambda/D)
 quantum efficiency factor = 0.9 (see parameterization in Robinson et al. 2016)
 MzV = 23.0 ( = V-band zodiacal light surface brightness)
 MezV = 22.0 ( = V-band exozodiacal light surface brightness)
 
 All planets are assumed to be orbiting the sun except as noted (the O2 False Positive planet orbits an F2V star).
+
+When the ground based option is selected from the Observation menu, the simulator accounts for Earth’s atmospheric transmittance and downwelling thermal radiation from the atmosphere. 
 
 ------------
 

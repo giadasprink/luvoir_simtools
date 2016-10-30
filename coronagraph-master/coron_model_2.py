@@ -11,6 +11,7 @@ import os
 from astropy.table import Table, Column
 mpl.rc('font', family='Times New Roman')
 mpl.rcParams['font.size'] = 25.0
+import os
 
 from bokeh.themes import Theme 
 import yaml 
@@ -18,10 +19,11 @@ from bokeh.plotting import Figure
 from bokeh.models import ColumnDataSource, HBox, VBoxForm, HoverTool, Paragraph, Range1d, Label, DataSource
 from bokeh.models.glyphs import Text
 from bokeh.layouts import column, row, WidgetBox 
-from bokeh.models.widgets import Slider, Panel, Tabs, Div, TextInput, RadioButtonGroup, Select
+from bokeh.models.widgets import Slider, Panel, Tabs, Div, TextInput, RadioButtonGroup, Select, RadioButtonGroup
 from bokeh.io import hplot, vplot, curdoc, output_file, show, vform
 from bokeh.models.callbacks import CustomJS
-from bokeh.embed import components, autoload_server 
+from bokeh.embed import components, autoload_server
+
 
 import coronagraph as cg  # Import coronagraph model
 
@@ -36,8 +38,6 @@ Dt = 20.0 # - SLIDER
 diam = 10. # mirror diameter - SLIDER
 Res = 70. # resolution - SLIDER
 Tsys = 150. # system temperature - SLIDER
-owa = 30. #OWA scaling factor - SLIDER
-iwa = 2. #IWA scaling factor - SLIDER
 
 # Planet params
 alpha = 90.     # phase angle at quadrature
@@ -53,9 +53,17 @@ Rs    = 1.      # star radius in solar radii
 d    = 10.     # distance to system (pc)  - SLIDER 
 Nez  = 1.      # number of exo-zodis  - SLIDER
 
+# Instrumental Params
+owa = 30. #OWA scaling factor - SLIDER
+iwa = 2. #IWA scaling factor - SLIDER
+De = 1e-4 # dark current - SLIDER
+Re = 0.1 # read noise - SLIDER
+Dtmax = 1.0 # max single exposure time - SLIDER
+
 # Template
 template = ''
 global template
+global comparison
 global Teff
 global Ts
 
@@ -104,7 +112,7 @@ Rs_ = Rs
 
 # Run coronagraph with default LUVOIR telescope (aka no keyword arguments)
 lam, dlam, A, q, Cratio, cp, csp, cz, cez, cD, cR, cth, DtSNR = \
-    cg.count_rates(Ahr, lamhr, alpha, Phi, Rp, Teff, Rs, r, d, Nez, diam, Res, Tsys, iwa, owa,solhr=solhr)
+    cg.count_rates(Ahr, lamhr, alpha, Phi, Rp, Teff, Rs, r, d, Nez, diam, Res, Tsys, iwa, owa,solhr=solhr, De=De, Re=Re, Dtmax=Dtmax)
 # Calculate background photon count rates
 cb = (cz + cez + csp + cD + cR + cth)
 # Convert hours to seconds
@@ -116,8 +124,17 @@ sig= Cratio/SNR
 # Add gaussian noise to flux ratio
 spec = Cratio + np.random.randn(len(Cratio))*sig
 
+lastlam = lam
+lastCratio = Cratio
+
 planet = ColumnDataSource(data=dict(lam=lam, cratio=Cratio*1e9, spec=spec*1e9, downerr=(spec-sig)*1e9, uperr=(spec+sig)*1e9))
+lamC = lastlam * 0.
+CratioC = lastCratio * 0.
+global lamC
+global CratioC
+compare = ColumnDataSource(data=dict(lam=lamC, cratio=Cratio*1e9)) #test
 textlabel = ColumnDataSource(data=dict(label = planet_label))
+
 
 ################################
 # BOKEH PLOTTING
@@ -127,9 +144,9 @@ textlabel = ColumnDataSource(data=dict(label = planet_label))
 snr_ymax = np.max(Cratio)*1e9
 snr_plot = Figure(plot_height=400, plot_width=750, 
               tools="crosshair,pan,reset,resize,save,box_zoom,wheel_zoom",
-              x_range=[0.2, 3.5], y_range=[-0.2, 2.], toolbar_location='right')
+              x_range=[0.2, 3.5], y_range=[-0.2, 1.3], toolbar_location='right')
 snr_plot.x_range = Range1d(0.2, 3.5, bounds=(0.2, 3.5)) 
-snr_plot.y_range = Range1d(-0.2, 2., bounds=(-0.2, 5.0)) 
+snr_plot.y_range = Range1d(-0.2, 1.3, bounds=(-0.2, 5.0)) 
 snr_plot.background_fill_color = "beige"
 snr_plot.background_fill_alpha = 0.5
 snr_plot.yaxis.axis_label='F_p/F_s (x10^9)' 
@@ -141,7 +158,9 @@ snr_plot.title.text = 'Planet Spectrum'
 #                 border_line_color='black', border_line_alpha=1.0,
 #                 background_fill_color='white', background_fill_alpha=1.0)
 
-
+print "plotting now"
+snr_plot.line('lam','cratio',source=compare,line_width=2.0, color="black", alpha=0.7)
+print "plotted it?"
 snr_plot.line('lam','cratio',source=planet,line_width=2.0, color="green", alpha=0.7)
 snr_plot.circle('lam', 'spec', source=planet, fill_color='red', line_color='black', size=8) 
 snr_plot.segment('lam', 'downerr', 'lam', 'uperr', source=planet, line_width=1, line_color='grey', line_alpha=0.5) 
@@ -193,17 +212,29 @@ def update_data(attrname, old, new):
     print '                   exozodi = ', exozodi.value, 'diameter (m) = ', diameter.value, 'resolution = ', resolution.value
     print '                   temperature (K) = ', temperature.value, 'IWA = ', inner.value, 'OWA = ', outer.value
     print 'You have chosen planet spectrum: ', template.value
-    
+    print 'You have chosen comparison spectrum: ', comparison.value
     try:
        lasttemplate
     except NameError:
        lasttemplate = 'Earth' #default first spectrum
+    try:
+       lastcomparison
+    except NameError:
+       lastcomparison = 'none' #default first spectrum
     global lasttemplate
     global Ahr_
     global lamhr_
     global solhr_
     global Teff_
     global Rs_
+    global Ahr_c
+    global lamhr_c
+    global solhr_c
+    global Teff_c
+    global Rs_c
+    global radius_c
+    global semimajor_c
+    global lastcomparison
     
 # Read-in new spectrum file only if changed
 #'BBody' variable some of these have in place of solhr is
@@ -224,6 +255,7 @@ def update_data(attrname, old, new):
           Teff_  = 5780.   # Sun-like Teff (K)
           Rs_    = 1.      # star radius in solar radii
           planet_label = ['Synthetic spectrum generated by T. Robinson (Robinson et al. 2011)']
+
 
        if template.value == 'Venus':
           fn = 'planets/Venus_geo_albedo.txt'
@@ -378,17 +410,13 @@ def update_data(attrname, old, new):
           Teff_  = 7050.   # F2V Teff (K)
           Rs_    = 1.3     # star radius in solar radii
           planet_label = ['Synthetic spectrum generated by S. Domagal-Goldman (Domagal-Goldman et al. 2014)']
-
-          
+  
           
        global lammin
        global lammax
        global planet_label
        lammin=min(lamhr_)
        lammax=max(lamhr_)-0.2 #this fixes a weird edge issue
-
-         
-
           
           
    # if template.value == lasttemplate:
@@ -397,12 +425,21 @@ def update_data(attrname, old, new):
    #    solhr_ = solhr
        #semimajor_ = semimajor.value
        #radius_ = radius.value
-       
 
+    print "ground based = ", ground_based.value
+    if ground_based.value == "No":
+       ground_based_ = False
+    if ground_based.value == "Yes":
+       ground_based_ = True
+
+    if ground_based_ == True:
+       lammin=min(lamhr_)+0.05 #edge issues worse when ground based turned on 
+       lammax=max(lamhr_)-0.25 
+    
     # Run coronagraph 
     lam, dlam, A, q, Cratio, cp, csp, cz, cez, cD, cR, cth, DtSNR = \
-        cg.count_rates(Ahr_, lamhr_, alpha, Phi, radius.value, Teff_, Rs_, semimajor.value, distance.value, exozodi.value, diameter.value, resolution.value, temperature.value, inner.value, outer.value,  solhr=solhr_, lammin=lammin, lammax=lammax)
-    print "ran coronagraph noise model"
+        cg.count_rates(Ahr_, lamhr_, alpha, Phi, radius.value, Teff_, Rs_, semimajor.value, distance.value, exozodi.value, diameter.value, resolution.value, temperature.value, inner.value, outer.value,  solhr=solhr_, lammin=lammin, lammax=lammax, De=darkcurrent.value, Re=readnoise.value, Dtmax = dtmax.value, GROUND=ground_based_)
+
 
     # Calculate background photon count rates
     cb = (cz + cez + csp + cD + cR + cth)
@@ -414,18 +451,217 @@ def update_data(attrname, old, new):
     sig= Cratio/SNR
     # Add gaussian noise to flux ratio
     spec = Cratio + np.random.randn(len(Cratio))*sig
-    
+    lastlam = lam
+    lastCratio = Cratio
+    global lastlam
+    global lastCratio
     planet.data = dict(lam=lam, cratio=Cratio*1e9, spec=spec*1e9, downerr=(spec-sig)*1e9, uperr=(spec+sig)*1e9)
     textlabel.data = dict(label=planet_label)
 
     format_button_group.active = None
     lasttemplate = template.value
 
-    print "lam, Cratio, spec, sig"
-    for i in range(0, len(lam)):
-       print lam[i], ',', Cratio[i], ',', spec[i], ',', sig[i]
+
+   # print "lam, Cratio, spec, sig"
+   # for i in range(0, len(lam)):
+   #    print lam[i], ',', Cratio[i], ',', spec[i], ',', sig[i]
 
 
+    if comparison.value != lastcomparison:
+      if comparison.value == 'Earth':
+          fn = 'planets/earth_quadrature_radiance_refl.dat'
+          model = np.loadtxt(fn, skiprows=8)
+          lamhr_c = model[:,0]
+          radhr_c = model[:,1]
+          solhr_c = model[:,2]
+          Ahr_c   = np.pi*(np.pi*radhr_c/solhr_c)
+          semimajor_c = 1.
+          radius_c = 1.
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by T. Robinson (Robinson et al. 2011)']
+
+      if comparison.value == 'Venus':
+          fn = 'planets/Venus_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=8)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = model[:,2]
+          semimajor_c = 0.72
+          radius_c = 0.94
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by T. Robinson']
+
+
+      if comparison.value =='Archean Earth':
+          fn = 'planets/ArcheanEarth_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=8)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = model[:,2]
+          semimajor_c = 1.
+          radius_c = 1.
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by G. Arney (Arney et al. 2016)']
+          
+      if comparison.value =='Hazy Archean Earth':
+          fn = 'planets/Hazy_ArcheanEarth_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=8)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = model[:,2]
+          semimajor_c = 1.
+          radius_c = 1.
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by G. Arney (Arney et al. 2016)']
+
+
+      if comparison.value =='1% PAL O2 Proterozoic Earth':
+          fn = 'planets/proterozoic_hi_o2_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=0)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = "BBody"
+          semimajor_c = 1.
+          radius_c = 1.
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by G. Arney (Arney et al. 2016)']
+          
+
+      if comparison.value =='0.1% PAL O2 Proterozoic Earth':
+          fn = 'planets/proterozoic_low_o2_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=0)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = "BBody"
+          semimajor_c = 1.
+          radius_c = 1.
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by G. Arney (Arney et al. 2016)']
+
+          
+      if comparison.value =='Early Mars':
+          fn = 'planets/EarlyMars_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=8)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = model[:,2]
+          semimajor_c = 1.52
+          radius_c = 0.53
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by G. Arney based on Smith et al. 2014']
+
+          
+      if comparison.value =='Mars':
+          fn = 'planets/Mars_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=8)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = 'Bbody'
+          semimajor_c = 1.52
+          radius_c = 0.53         
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by T. Robinson']
+
+          
+      if comparison.value =='Jupiter':
+          fn = 'planets/Jupiter_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=0)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = 'Bbody'
+          semimajor_c = 5.46
+          radius_c = 10.97
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['0.9-0.3 microns observed by Karkoschka et al. (1998); 0.9-2.4 microns observed by Rayner et al. (2009)']
+
+          
+      if comparison.value =='Saturn':
+          fn = 'planets/Saturn_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=0)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = 'Bbody'
+          semimajor_c = 9.55
+          radius_c = 9.14
+          Teff_c = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['0.9-0.3 microns observed by Karkoschka et al. (1998); 0.9-2.4 microns observed by Rayner et al. (2009)']
+
+          
+      if comparison.value =='Uranus':
+          fn = 'planets/Uranus_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=0)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = 'Bbody'
+          semimajor_c = 19.21
+          radius_c = 3.98
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['0.9-0.3 microns observed by Karkoschka et al. (1998); 0.9-2.4 microns observed by Rayner et al. (2009)']
+
+          
+      if comparison.value =='Neptune':
+          fn = 'planets/Neptune_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=0)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = 'Bbody'
+          semimajor_c = 29.8
+          radius_c = 3.86
+          Teff_c  = 5780.   # Sun-like Teff (K)
+          Rs_c    = 1.      # star radius in solar radii
+          planet_label_c = ['0.9-0.3 microns observed by Karkoschka et al. (1998); 0.9-2.4 microns observed by Rayner et al. (2009)']
+
+
+      if comparison.value =='False O2 Planet (F2V star)':
+          fn = 'planets/fstarcloudy_geo_albedo.txt'
+          model = np.loadtxt(fn, skiprows=0)
+          lamhr_c = model[:,0]
+          Ahr_c = model[:,1]
+          solhr_c = "Bbody"
+          semimajor_c = 1.72 #Earth equivalent distance for F star
+          radius_c = 1.
+          Teff_c  = 7050.   # F2V Teff (K)
+          Rs_c    = 1.3     # star radius in solar radii
+          planet_label_c = ['Synthetic spectrum generated by S. Domagal-Goldman (Domagal-Goldman et al. 2014)']          
+
+      global lammin_c
+      global lammax_c
+      lammin_c=min(lamhr_c)
+      lammax_c=max(lamhr_c)-0.2 #this fixes a weird edge issue
+              
+
+    if comparison.value != 'none':
+      print 'comparison.value =', comparison.value
+      print  'running comparison spectrum'
+      lamC, dlamC, AC, qC, CratioC, cpC, cspC, czC, cezC, cDC, cRC, cthC, DtSNRC = \
+       cg.count_rates(Ahr_c, lamhr_c, alpha, Phi, radius_c, Teff_c, Rs_c, semimajor_c, distance.value, exozodi.value, diameter.value, resolution.value, temperature.value, inner.value, outer.value,  solhr=solhr_c, lammin=lammin_c, lammax=lammax_c, De=darkcurrent.value, Re=readnoise.value, Dtmax = dtmax.value)
+      print 'ran comparison coronagraph noise model'
+
+    if comparison.value == 'none':
+        lamC = lamhr_ * 0.
+        CratioC = Ahr_ * 0.
+     
+ 
+    lastcomparison = comparison.value
+    print "constructing compare.data"
+    #print lamC
+    #print CratioC
+    compare.data = dict(lam=lamC, cratio=CratioC*1e9)
+
+    
+
+       
 ######################################
 # SET UP ALL THE WIDGETS AND CALLBACKS 
 ######################################
@@ -464,24 +700,44 @@ temperature  = Slider(title="Telescope Temperature (K)", value = 150.0, start=90
 temperature.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
 """)
-inner  = Slider(title="Inner Working Angle factor", value = 2.0, start=1.22, end=4., step=0.2, callback_policy='mouseup') 
+inner  = Slider(title="Inner Working Angle factor x lambda/D", value = 2.0, start=1.22, end=4., step=0.2, callback_policy='mouseup') 
 inner.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
 """)
-outer  = Slider(title="Outer Working Angle factor", value = 30.0, start=20, end=100., step=1, callback_policy='mouseup') 
+outer  = Slider(title="Outer Working Angle factor x lambda/D", value = 30.0, start=20, end=100., step=1, callback_policy='mouseup') 
 outer.callback = CustomJS(args=dict(source=source), code="""
     source.data = { value: [cb_obj.value] }
-""")                                
+""")
+darkcurrent  = Slider(title="Dark current (counts/s)", value = 1e-4, start=1e-5, end=1e-3, step=1e-5, callback_policy='mouseup') 
+darkcurrent.callback = CustomJS(args=dict(source=source), code="""
+    source.data = { value: [cb_obj.value] }
+""")
+readnoise  = Slider(title="Read noise (counts/pixel)", value = 0.1, start=0.01, end=1, step=0.05, callback_policy='mouseup') 
+readnoise.callback = CustomJS(args=dict(source=source), code="""
+    source.data = { value: [cb_obj.value] }
+""")
+dtmax  = Slider(title="Maximum single exposure time (hours)", value = 1, start=0.1, end=10., step=0.5, callback_policy='mouseup') 
+dtmax.callback = CustomJS(args=dict(source=source), code="""
+    source.data = { value: [cb_obj.value] }
+""")
+#ground based choice
+#ground_based = RadioButtonGroup(name="Simulate ground based observing?", labels=["False", "True"], active=0)
+ground_based = Select(title="Simulate ground-based observation?", value="No", options=["No",  "Yes"])
+
 #select menu for planet
 template = Select(title="Planet Spectrum", value="Earth", options=["Earth",  "Archean Earth", "Hazy Archean Earth", "1% PAL O2 Proterozoic Earth", "0.1% PAL O2 Proterozoic Earth","Venus", "Early Mars", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune","False O2 Planet (F2V star)"])
+#select menu for comparison spectrum
+comparison = Select(title="Show comparison spectrum?", value ="none", options=["none", "Earth",  "Archean Earth", "Hazy Archean Earth", "1% PAL O2 Proterozoic Earth", "0.1% PAL O2 Proterozoic Earth","Venus", "Early Mars", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune","False O2 Planet (F2V star)"])
 
 
-oo = column(children=[exptime, diameter, resolution, temperature, inner, outer]) 
-pp = column(children=[template, distance, radius, semimajor, exozodi]) 
-qq = column(children=[instruction0, text_input, instruction1, format_button_group, instruction2, link_box]) 
+oo = column(children=[exptime, diameter, resolution, temperature, ground_based]) 
+pp = column(children=[template, comparison, distance, radius, semimajor, exozodi]) 
+qq = column(children=[instruction0, text_input, instruction1, format_button_group, instruction2, link_box])
+ii = column(children=[inner, outer, darkcurrent, readnoise, dtmax])
 
 observation_tab = Panel(child=oo, title='Observation')
 planet_tab = Panel(child=pp, title='Planet')
+instrument_tab = Panel(child=ii, title='Instrumentation')
 download_tab = Panel(child=qq, title='Download')
 
 for w in [text_input]: 
@@ -490,10 +746,15 @@ format_button_group.on_click(i_clicked_a_button)
 
 #gna - added this
 for ww in [template]: 
-    ww.on_change('value', update_data) #changed from update_data to new_template
+    ww.on_change('value', update_data)
 
+for www in [comparison]: 
+    www.on_change('value', update_data)
 
-inputs = Tabs(tabs=[ planet_tab, observation_tab, download_tab ])
+for gg in [ground_based]: 
+    gg.on_change('value', update_data)
+
+inputs = Tabs(tabs=[ planet_tab, observation_tab, instrument_tab, download_tab ])
 curdoc().add_root(row(children=[inputs, snr_plot])) 
 
 #curdoc().theme = Theme(json=yaml.load("""

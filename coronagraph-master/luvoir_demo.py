@@ -65,7 +65,7 @@ Ahr   = np.pi*(np.pi*radhr/solhr)
 
 # Run coronagraph with default LUVOIR telescope (aka no keyword arguments)
 lam, dlam, A, q, Cratio, cp, csp, cz, cez, cD, cR, cth, DtSNR = \
-    cg.count_rates(Ahr, lamhr, solhr, alpha, Phi, Rp, Teff, Rs, r, d, Nez
+    cg.count_rates(Ahr, lamhr, solhr, alpha, Phi, Rp, Teff, Rs, r, d, Nez,\
                    )
 
 # Calculate background photon count rates
@@ -135,3 +135,15 @@ if plot:
     else:
         plt.show()
 
+################################
+# SAVING
+################################
+
+# Save Synthetic data file (wavelength, albedo, error) if requested
+if savefile:
+    data_tag = 'luvoir_demo_'+tag+'.txt'
+    y_sav = np.array([lam,spec,sig])
+    np.savetxt(data_tag, y_sav.T)
+    print 'Saved: ' + data_tag
+
+sys.exit()
