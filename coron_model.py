@@ -136,7 +136,7 @@ lamC = lastlam * 0.
 CratioC = lastCratio * 0.
 global lamC
 global CratioC
-global snr_plot
+#global snr_plot
 compare = ColumnDataSource(data=dict(lam=lamC, cratio=Cratio*1e9)) #test
 textlabel = ColumnDataSource(data=dict(label = planet_label))
 
@@ -146,13 +146,13 @@ textlabel = ColumnDataSource(data=dict(label = planet_label))
 ################################
 
 #fixed y axis is bad
-snr_ymax = np.max(Cratio)*1e9
+#snr_ymax = np.max(Cratio)*1e9
 snr_plot = Figure(plot_height=500, plot_width=750, 
               tools="crosshair,pan,reset,resize,save,box_zoom,wheel_zoom",
-              toolbar_location='right')
+                  toolbar_location='right', x_range=[0.2, 3.0], y_range=[-0.2, 1])
 #snr_plot.rect(x=[0.2, 3.5], y=[-0.2, snr_ymax+0.1])
-snr_plot.x_range = Range1d(0.2, 3., bounds=(0.2, 5))
-snr_plot.y_range = DataRange1d(start = -0.2, end=1.5)
+#snr_plot.x_range = Range1d(0.2, 3., bounds=(0.2, 5))
+#snr_plot.y_range = DataRange1d(start = -0.2, end=1.5)
 #snr_plot.y_range.start = -0.2
 #snr_plot.y_range.end = snr_ymax
 #cursession().store_objects(snr_plot)
@@ -169,12 +169,23 @@ snr_plot.circle('lam', 'spec', source=planet, fill_color='red', line_color='blac
 snr_plot.segment('lam', 'downerr', 'lam', 'uperr', source=planet, line_width=1, line_color='grey', line_alpha=0.5) 
 
 #rectangle behind annotation:
-snr_plot.quad(top = [-0.1], left=[0.2], right=[3.5], bottom=[-0.2], color="white")
-
-glyph = Text(x=0.25, y=-0.19, text="label", text_font_size='9pt')
+#try:
+#   lastcomparison
+#except NameError:
+#snr_plot.quad(top = [-0.1], left=[0.2], right=[3.5], bottom=[-0.2], color="white")
+glyph = Text(x=0.25, y=-0.19, text="label", text_font_size='9pt', text_font_style='bold', text_color='blue')
+#attempting to outline the text here for ease of visibility... 
+glyph2 = Text(x=0.245, y=-0.19, text="label", text_font_size='9pt', text_font_style='bold', text_color='white')
+glyph3 = Text(x=0.25, y=-0.195, text="label", text_font_size='9pt', text_font_style='bold', text_color='white')
+glyph4 = Text(x=0.25, y=-0.845, text="label", text_font_size='9pt', text_font_style='bold', text_color='white')
+glyph5 = Text(x=0.255, y=-0.19, text="label", text_font_size='9pt', text_font_style='bold', text_color='white')
+snr_plot.add_glyph(textlabel, glyph2)
+snr_plot.add_glyph(textlabel, glyph3)
+snr_plot.add_glyph(textlabel, glyph4)
+snr_plot.add_glyph(textlabel, glyph5)
 snr_plot.add_glyph(textlabel, glyph)
 
-show(snr_plot) 
+#show(snr_plot) 
 
 def change_filename(attrname, old, new): 
    format_button_group.active = None 
@@ -530,13 +541,8 @@ def update_data(attrname, old, new):
 
     format_button_group.active = None
     lasttemplate = template.value
-    snr_ymax_ = np.max(Cratio)*1e9
-    global snr_ymax_
-    yrange=[snr_ymax]
-    plotyrange.data = dict(yrange=yrange)
-   # snr_plot.y_range = DataRange1d(start = -0.2, end=snr_ymax_)
-    global snr_plot
 
+    #print snr_plot.y_ran
     if comparison.value != lastcomparison:
       if comparison.value == 'Earth':
           fn = 'planets/earth_quadrature_radiance_refl.dat'
@@ -788,13 +794,36 @@ def update_data(attrname, old, new):
     if comparison.value == 'none':
         lamC = lamhr_ * 0.
         CratioC = Ahr_ * 0.
-     
- 
+
+
     lastcomparison = comparison.value
     print "constructing compare.data"
     #print lamC
     #print CratioC
     compare.data = dict(lam=lamC, cratio=CratioC*1e9)
+
+        
+    #PLOT UPDATES    
+    global snr_ymax_
+    global snr_ymin_
+    print 'snr_ymax_',  np.max([np.max(Cratio)*1e9, np.max(CratioC)*1e9])
+    print 'snr_ymin_',  np.min([np.min(Cratio)*1e9, np.min(CratioC)*1e9])
+    snr_ymax_ = np.max([np.max(Cratio)*1e9, np.max(CratioC)*1e9])
+    snr_ymin_ = np.min([np.min(Cratio)*1e9, np.min(CratioC)*1e9])
+    snr_plot.y_range.start = -0.2
+    #snr_plot.y_range.start = snr_ymin_ - 0.1*snr_ymax_
+    if template.value == 'Early Mars' or template.value == 'Mars':
+       if comparison.value == 'none' or comparison.value == 'Early Mars' or comparison.value == 'Mars':
+          snr_plot.y_range.end = snr_ymax_ + 2.*snr_ymax_
+    else:
+       snr_plot.y_range.end = snr_ymax_ + 0.2*snr_ymax_
+
+    #snr_plot.quad(top = [snr_ymax_*0.04], left=[0.2], right=[3.5], bottom=[snr_ymin_ - 0.1*snr_ymax_], color="white")
+    #glyph = Text(x=0.25, y=snr_ymax_*0.04, text="label", text_font_size='9pt')
+    #print snr_ymin_+snr_ymin_*1.1
+    #print snr_ymin_+snr_ymin_*1.09
+    #print snr_ymin_
+    #snr_plot.add_glyph(textlabel, glyph)
 
     
 
@@ -892,7 +921,8 @@ for gg in [ground_based]:
     gg.on_change('value', update_data)
 
 inputs = Tabs(tabs=[ planet_tab, observation_tab, instrument_tab, download_tab ])
-curdoc().add_root(row(children=[inputs, snr_plot])) 
+
+curdoc().add_root(row(inputs, snr_plot)) 
 
 #curdoc().theme = Theme(json=yaml.load("""
 #attrs:
@@ -915,4 +945,4 @@ curdoc().add_root(row(children=[inputs, snr_plot]))
 #""")) 
 
 
-curdoc().add_root(source) 
+#curdoc().add_root(source) 
