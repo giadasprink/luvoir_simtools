@@ -2,18 +2,22 @@ The LUVOIR coronagraph simulator tool is based off Tyler Robinson's coronagraph 
 
 The coronagraph noise model used here assumes most of the same nominal parameters as those used in Robinson et al. (2016). The values of internal (i.e. non-slider) input parameters used here are:
 
+Dark current = 1e-4 counts/s
+Read noise = 0.1 counts per pixel 
 Contrast ratio = 1e-10
 Detector temperature = 50 K
 Emissivity = 0.9
 DNHpix = 3.0 (= number of horizontal/spatial pixels in dispersed spectrum)
 width of photometric aperture = 1.5 (times lambda/D)
-quantum efficiency factor = 0.9 (see parameterization in Robinson et al. 2016)
+quantum efficiency factor = 0.9 
 MzV = 23.0 ( = V-band zodiacal light surface brightness)
 MezV = 22.0 ( = V-band exozodiacal light surface brightness)
 
+Note that this simulator differs from the simulator described in Robinson et al. (2016) because here we assume a constant quantum efficiency as a function of wavelength ( = 0.9), whereas Robinson et al. (2016) assumes wavelength dependence.
+
 All planets are assumed to be orbiting the sun except as noted (the O2 False Positive planet orbits an F2V star).
 
-When the ground based option is selected from the Observation menu, the simulator accounts for Earth’s atmospheric transmittance and downwelling thermal radiation from the atmosphere. 
+When the ground based option is selected from the Observation menu, the simulator accounts for Earth’s atmospheric transmittance and downwelling thermal radiation from the atmosphere. Atmospheric airglow is not yet included.
 
 ------------
 

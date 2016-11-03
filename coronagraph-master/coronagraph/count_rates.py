@@ -111,13 +111,14 @@ def count_rates(Ahr, lamhr,
 
     # Set Quantum Efficiency
     print "setting QE"
-    q = np.zeros(Nlam)
-    for j in range(Nlam):
-        if (lam[j] <= 0.7):
-            q[j] = qe
-        else:
-            q[j] = qe*(1.0 - (lam[j]-0.7)/(1.0-0.7))
-    if q[j] < 0.0: q[j] = 0.
+    q = np.zeros(Nlam) + qe
+    
+    #for j in range(Nlam):
+    #    if (lam[j] <= 0.7):
+    #        q[j] = qe
+    #    else:
+    #        q[j] = qe*(1.0 - (lam[j]-0.7)/(1.0-0.7))
+    #if q[j] < 0.0: q[j] = 0.
 
     # Set Dark current and Read noise
     De = np.zeros(Nlam) + De
@@ -135,10 +136,10 @@ def count_rates(Ahr, lamhr,
         # If there are wavelength bins longer than 1um:
         if (np.sum(iNIR) > 0):
             theta[iNIR] = 1.0/1e6/diam/2.*(180/np.pi*3600.)
-            q[iNIR]  = 0.90              # Different from vis detector
+            #q[iNIR]  = 0.90              # Different from vis detector
             Re[iNIR] = 2.                # Different from vis detector
 
-            # Set dark current based on NIR detector properties
+            # Set dark current based on NIR detector properties	    
             if ( lammax <= 2.0 ): De[iNIR] = 1e-3 * np.power(10., (Tdet-120.)*7./100. )
             if ( lammax > 2.0 ) and ( lammax <= 4.0 ): De[iNIR] = 1e-3 * np.power(10., (Tdet-80.)*9./140. )
             if ( lammax > 4.0 ) and ( lammax <= 7.0 ): De[iNIR] = 1e-3 * np.power(10., (Tdet-40.)*11./140. )
